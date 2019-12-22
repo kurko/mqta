@@ -1,0 +1,47 @@
+#!/usr/bin/env ruby
+# encoding: utf-8
+
+require "bundler/setup"
+require "bunny"
+
+STDOUT.sync = true
+queue_name = "mqta-debug #{Time.now.to_i}"
+
+config = {
+  host: ENV.fetch('HOST'),
+  vhost: ENV.fetch('VHOST'),
+  user:  ENV.fetch('USER'),
+  password: ENV.fetch('PASSWORD'),
+  exchange: ENV.fetch('EXCHANGE'),
+  # queue:
+  #durable: true
+  #port:
+}
+
+conn = Bunny.new(
+  host: config[:host],
+  vhost: config[:vhost],
+  user: config[:user],
+  password: config[:password]
+)
+conn.start
+
+channel = conn.create_channel
+exchange = channel.fanout(config[:exchange])
+log_channel = channel.queue(queue_name, :auto_delete => true)
+log_channel = log_channel.bind(exchange)
+
+log_channel.subscribe do |delivery_info, metadata, payload|
+  begin
+    $stdout.puts payload
+  rescue Errno::EPIPE
+    # Support Unix Pipe
+    exit(74)
+  end
+end
+
+loop do
+  sleep 5
+end
+conn.close
+
